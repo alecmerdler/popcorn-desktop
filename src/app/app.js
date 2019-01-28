@@ -170,7 +170,7 @@ var initTemplates = function () {
 var initApp = function () {
     var mainWindow = new App.View.MainWindow();
     win.show();
-
+    win.showDevTools();
 
     try {
         App.showView(mainWindow);
@@ -675,6 +675,7 @@ if (last_arg && (isVideo(last_arg))) {
 }
 
 nw.App.on('open', function (cmd) {
+    // FIXME(alecmerdler)
     var file;
     if (os.platform() === 'win32') {
         file = cmd.split('"');

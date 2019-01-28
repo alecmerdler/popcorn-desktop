@@ -45,8 +45,9 @@
                 this.handleStreamInfo();
 
                 return this.createServer();
-            }.bind(this)).then(this.waitForBuffer.bind(this)).catch(this.handleErrors.bind(this));
-        },
+            // FIXME(alecmerdler): Removing `waitForBuffer` and hitting the http URL (from normal Chrome) directly works to stream the media
+        }.bind(this)).then(this.waitForBuffer.bind(this)).catch(this.handleErrors.bind(this));
+},
 
         // kill the streamer
         stop: function() {
@@ -104,15 +105,14 @@
                     resolve(this.torrent);
                 }.bind(this));
                 this.torrent.on('download', function () {
-
-                this.torrentModel.set('downloadSpeed', Common.fileSize(this.torrent.downloadSpeed) + '/s');
-                this.torrentModel.set('downloaded', Math.round(this.torrent.downloaded).toFixed(2));
-                this.torrentModel.set('downloadedFormatted', Common.fileSize(this.torrent.downloaded));
-                this.torrentModel.set('active_peers', this.torrent.numPeers);
-                this.torrentModel.set('downloadedPercent', (this.torrent.progress * 100) || 0);
-                this.torrentModel.set('active_peers', this.torrent.numPeers);
-                this.torrentModel.set('total_peers', this.torrent.numPeers);
-                this.torrentModel.set('time_left', (this.torrent.timeRemaining));
+                    this.torrentModel.set('downloadSpeed', Common.fileSize(this.torrent.downloadSpeed) + '/s');
+                    this.torrentModel.set('downloaded', Math.round(this.torrent.downloaded).toFixed(2));
+                    this.torrentModel.set('downloadedFormatted', Common.fileSize(this.torrent.downloaded));
+                    this.torrentModel.set('active_peers', this.torrent.numPeers);
+                    this.torrentModel.set('downloadedPercent', (this.torrent.progress * 100) || 0);
+                    this.torrentModel.set('active_peers', this.torrent.numPeers);
+                    this.torrentModel.set('total_peers', this.torrent.numPeers);
+                    this.torrentModel.set('time_left', (this.torrent.timeRemaining));
                 }.bind(this));
 
 
@@ -126,8 +126,8 @@
 
                 this.torrent.on('error', function (error) {
                      if (this.torrent.infoHash) {
-                     this.torrent.remove(this.torrent.infoHash);
-                     this.torrent.add(this.torrent.infoHash);
+                        this.torrent.remove(this.torrent.infoHash);
+                        this.torrent.add(this.torrent.infoHash);
                    } else {
                      win.error('Torrent fatal error', error);
                      this.stop();
@@ -300,14 +300,16 @@
                 }
 
                 try {
-                    this.torrentModel.get('torrent').createServer().listen(serverPort);
+                    // FIXME(alecmerdler): Can view media using URL in normal browser, but not from NW.js window...
+                    this.torrentModel.get('torrent').createServer().listen({port: serverPort}, () => {
+                        var url = 'http://127.0.0.1:' + serverPort + '/' + this.torrentModel.get('video_file').index;
 
-                    var url = 'http://127.0.0.1:' + serverPort + '/' + this.torrentModel.get('video_file').index;
+                        this.streamInfo.set('src', url);
+                        this.streamInfo.set('type', 'video/mp4');
 
-                    this.streamInfo.set('src', url);
-                    this.streamInfo.set('type', 'video/mp4');
-
-                    resolve(url);
+                        console.log(url);
+                        resolve(url);
+                    });
                 } catch (e) {
                     setTimeout(function () {
                         return this.createServer(0).then(resolve);
@@ -325,29 +327,29 @@
 
         // dummy element to fire stream:start
         waitForBuffer: function (url) {
-            this.video = document.createElement('video');
+            // this.video = document.createElement('video');
 
-            this.video.volume = 0;
-            this.video.src = url;
+            // this.video.volume = 0;
+            // this.video.src = url;
 
-            this.video.play().then(function () {
-                this.canPlay = true;
-                this.video.pause();
-                this.video.src = '';
-                this.video.load();
-            }.bind(this)).catch(function (error) {
-                //catch the correct error and avoid erroring on server destroy (stream:stop while still loading the play())
-                if (!this.stopped) {
-                    win.error('Can\'t play video %s: %s, code %d', url, error.name, error.code);
-                    // TODO: set state to error
-                    // TODO: once we have a global option for extplayer, loads it instead
-                    // for now, we ignore that so we can display error in the player:
-                    this.canPlay = true;
-                    this.video.pause();
-                    this.video.src = '';
-                    this.video.load();
-                }
-            }.bind(this));
+            // this.video.play().then(function () {
+            //     this.canPlay = true;
+            //     this.video.pause();
+            //     this.video.src = '';
+            //     this.video.load();
+            // }.bind(this)).catch(function (error) {
+            //     //catch the correct error and avoid erroring on server destroy (stream:stop while still loading the play())
+            //     if (!this.stopped) {
+            //         win.error('Can\'t play video %s: %s, code %d', url, error.name, error.code);
+            //         // TODO: set state to error
+            //         // TODO: once we have a global option for extplayer, loads it instead
+            //         // for now, we ignore that so we can display error in the player:
+            //         this.canPlay = true;
+            //         this.video.pause();
+            //         this.video.src = '';
+            //         this.video.load();
+            //     }
+            // }.bind(this));
         },
 
         setModels: function (model) {
@@ -479,25 +481,25 @@
             }
         },
         // serve subtitles on a local server to make them accessible to remote cast devices
-serveSubtitles: function(localPath) {
-    App.vent.trigger('subtitle:convert', {
-        path: localPath
-    }, function(err, res) {
-        if (err) {
-            win.error('error converting subtitles', err);
-            this.streamInfo.set('subFile', null);
-            App.vent.trigger('notification:show', new App.Model.Notification({
-                title: i18n.__('Error converting subtitle'),
-                body: i18n.__('Try another subtitle or drop one in the player'),
-                showRestart: false,
-                type: 'error',
-                autoclose: true
-            }));
-        } else {
-            App.SubtitlesServer.start(res);
-        }
-    }.bind(this));
-},
+        serveSubtitles: function(localPath) {
+            App.vent.trigger('subtitle:convert', {
+                path: localPath
+            }, function(err, res) {
+                if (err) {
+                    win.error('error converting subtitles', err);
+                    this.streamInfo.set('subFile', null);
+                    App.vent.trigger('notification:show', new App.Model.Notification({
+                        title: i18n.__('Error converting subtitle'),
+                        body: i18n.__('Try another subtitle or drop one in the player'),
+                        showRestart: false,
+                        type: 'error',
+                        autoclose: true
+                    }));
+                } else {
+                    App.SubtitlesServer.start(res);
+                }
+            }.bind(this));
+        },
 
         handleSubtitles: function () {
             if (this.stopped) {
